@@ -293,8 +293,6 @@ int parse(const char * format, unsigned int * i, struct FMT * fmt) {
 			case 'u': fmt->type = UINT; break; // unsigned int
 			case 'x': fmt->type = HEX; break; // hexadecimal
 			case 'p': fmt->type = PTR; break; // memory address
-			case 'I': fmt->type = LONG; break; // long int
-			case 'U': fmt->type = ULONG; break; // unsigned long int
 			case 'd': fmt->type = DOUBLE; break; // double
 			case 'D': fmt->type = LDOUBLE; break; // long double
 			case 'b': fmt->type = BOOL; break; // boolean (char converted to 'true' or 'false')
