@@ -1,15 +1,91 @@
 #include "../include/fmt.h"
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdarg.h>
+
+enum {
+	INT, LONG, LLONG,
+	UINT, ULONG, ULLONG,
+	CHAR, BOOL,
+	HEX,
+	DOUBLE, LDOUBLE,
+	PTR, STR
+};
+
+struct FMT {
+	long long int i;
+	long double d;
+	void * ptr;	
+	int hex;
+
+	char repeat;
+	char var_len;
+	unsigned int pointer; // size of array
+	
+	unsigned int count;
+	unsigned int type;
+
+	char * delim;
+	unsigned int str_len;
+};
+
+struct FMT * init_fmt();
+
+/*		FORMAT FUNCTIONS	*/
+
+char * fmt_llong(long long int, struct FMT *);
+char * fmt_ullong(unsigned long long int, struct FMT *);
+
+char * fmt_hex(unsigned long int, struct FMT *);
+char * fmt_double(double, struct FMT *);
+char * fmt_ldouble(long double, struct FMT *);
+char * fmt_ptr(void *, struct FMT *);
+
+char * fmt_str(char *);
+
+char * f(struct FMT *);
+
+/*		PRINT FUNCTIONS		*/
+
+void p_llong(long long int, struct FMT *);
+void p_ullong(unsigned long long int, struct FMT *);
+
+void p_hex(unsigned long int, struct FMT *);
+void p_double(double, struct FMT *);
+void p_ldouble(long double, struct FMT *);
+void p_str(char *);
+void p_ptr(void *, struct FMT *);
+
+void p(struct FMT *);
+
+/*		OTHER		*/
+
+int parse(const char *, unsigned int *, struct FMT *);
+unsigned int parse_uint(const char *, unsigned int *);
+
+void pop_arg(struct FMT *, va_list);
+int _print(const char *, va_list);
+
+unsigned int len(const char *);
+int concat(char *, char *, unsigned int);
+
+const char * type_to_str(unsigned int);
+#ifdef _DEBUG
+char * fmt_to_str(struct FMT *);
+#endif
+/*		Function Implementations	*/
+
 const char hex_digits[] = "0123456789ABCDEF";
 
 char * fmt_llong(long long int val, struct FMT * fmt) {
-	unsigned long long int copy = val;
+	unsigned long long int list = val;
 	int len = 1, is_neg = val < 0;
 	if (is_neg) {
 		val = -val;
-		copy = val;
+		list = val;
 	}
-	while (copy /= 10) ++len;
+	while (list /= 10) ++len;
 	char * buf = malloc(sizeof(char) * (len + 1));
 	if (is_neg) { buf[0] = '-'; ++len;}
 	for (unsigned int i = len; i-- != is_neg; val /= 10) {
@@ -17,15 +93,14 @@ char * fmt_llong(long long int val, struct FMT * fmt) {
 	}
 	buf[len] = 0;
 	fmt->str_len = len;
-	printf("%s\n", buf);
 	return buf;
 }
 
-char * fmt_ullong(unsigned  long long int val, struct FMT * fmt) {
-	long long unsigned int copy = val;
+char * fmt_ullong(unsigned long long int val, struct FMT * fmt) {
+	long long unsigned int list = val;
 	unsigned int len = 1, i = 0;
 
-	while (copy /= 10) ++len;	
+	while ((list /= 10)) ++len;
 	char * buf = malloc(sizeof(char) * (len + 1));
 	for (unsigned int i = len; i--; val /= 10) {
 		buf[i] = '0' + (val % 10);
@@ -35,16 +110,11 @@ char * fmt_ullong(unsigned  long long int val, struct FMT * fmt) {
 	return buf;
 }
 
-char * fmt_hex(int val, struct FMT * fmt) {
-	unsigned int copy = val, len = 3, is_neg = 0;
-	if (val < 0) {
-		is_neg = 1;
-		val = -val;
-	}
-	while (copy >>= 4) ++len;
-	char * buf = malloc(sizeof(char) * (1 + (is_neg ? ++len : len)));
-	if (is_neg) buf[0] = '-', buf[1] = '0', buf[2] = 'x';
-	else buf[0] = '0', buf[1] = 'x';
+char * fmt_hex(unsigned long int val, struct FMT * fmt) {
+	unsigned long int list = val, len = 3, is_neg = 0;	
+	while (list >>= 4) ++len;
+	char * buf = malloc(sizeof(char) * (len + 1));
+	buf[0] = '0', buf[1] = 'x';
 	buf[len] = 0;
 	fmt->str_len = len;
 	do {
@@ -56,7 +126,8 @@ char * fmt_hex(int val, struct FMT * fmt) {
 char * fmt_double(double val, struct FMT *) {  }
 char * fmt_ldouble(long double val, struct FMT *) {  }
 
-char * fmt_ptr(void * val, struct FMT * fmt) { 
+char * fmt_ptr(void * val, struct FMT * fmt) {
+	// printf("%p\n", val);
 	if (val == NULL) {
 		return "(NULL)";
 	} else {
@@ -84,10 +155,7 @@ char * f(struct FMT * fmt) {
 
 		case INT:
 		case LONG: 
-		case LLONG: {
-						println("{i}", fmt->i);
-						return fmt_llong(fmt->i, fmt);
-					}
+		case LLONG: return fmt_llong(fmt->i, fmt);
 
 		case UINT:
 		case ULONG: 
@@ -100,8 +168,12 @@ char * f(struct FMT * fmt) {
 
 		case PTR: return fmt_ptr(fmt->ptr, fmt);
 		case STR: {
-					  while (((char *)fmt->ptr)[fmt->str_len++]);
-					  return fmt->ptr;
+						if (fmt->ptr != NULL) {
+							while (((char *)fmt->ptr)[fmt->str_len++]);
+						} else {
+							fmt->str_len++;
+						}
+						return fmt->ptr;
 				  }
 		default: {
 					 println("\n[FMT Error]: '{s}' is not a valid type", type_to_str(fmt->type));
@@ -124,21 +196,23 @@ void p_llong(long long int val, struct FMT * fmt) {
 	p_ullong(val, fmt);
 }
 
-void p_hex(unsigned int val, struct FMT * fmt) {
+void p_hex(unsigned long int val, struct FMT * fmt) {
 	char * buf = fmt_hex(val, fmt);
 	p_str(buf);
 	free(buf);
 }
 
 void p_str(char * val) {
-	while (*val) putc(*val++, stdout);	
+	if (val != NULL) {
+		while (*val) putc(*(val++), stdout);
+	}
 }
 
 void p_ptr(void * val, struct FMT * fmt) {
 	if (val == NULL) {
 		p_str("(NULL)");
 	} else {
-		p_hex(*((long int*)val), fmt);
+		p_hex((unsigned long int)val, fmt);
 	}
 
 }
@@ -167,50 +241,49 @@ void p(struct FMT * fmt) {
 	}
 }
 
-unsigned int parse_uint(const char * format, unsigned int * i) {
+unsigned int parse_uint(const char * format, unsigned int * index) {
 	char c;
-	unsigned int num = 0;
-	while ((c = format[*i++]) != 0) {
+	for (unsigned int num = 0, i = *index - 1; (c = format[i]); i++) {
 		if ('0' <= c && c <= '9') {
 			num = 10 * num + c - '0';
+			continue;
 		}
+		*index = i;
 		return num;
 	}
 	return 0;
 }
 
-void pop_arg(struct FMT * fmt, va_list * list) {
+void pop_arg(struct FMT * fmt, va_list list) {
 	
 	switch (fmt->type) {
-		case CHAR:		fmt->i = (char) va_arg(*list, int); break;
-		case BOOL:		fmt->i = (char) va_arg(*list, int); break;
+		case CHAR:		fmt->i = (char) va_arg(list, int); break;
+		case BOOL:		fmt->i = (char) va_arg(list, int); break;
 		
-		case INT:		fmt->i =		va_arg(*list, int); break;
-		case LONG:		fmt->i =		va_arg(*list, long int); break;
-		case LLONG:		fmt->i =		va_arg(*list, long long int); break;
+		case INT:		fmt->i =		va_arg(list, int); break;
+		case LONG:		fmt->i =		va_arg(list, long int); break;
+		case LLONG:		fmt->i =		va_arg(list, long long int); break;
 		
-		case UINT:		fmt->i =		va_arg(*list, unsigned int); break;
-		case ULONG:		fmt->i =		va_arg(*list, unsigned long int); break;
-		case ULLONG:	fmt->i =		va_arg(*list, unsigned long long int); break;
+		case UINT:		fmt->i =		va_arg(list, unsigned int); break;
+		case ULONG:		fmt->i =		va_arg(list, unsigned long int); break;
+		case ULLONG:	fmt->i =		va_arg(list, unsigned long long int); break;
 
-		case HEX:		fmt->i =		va_arg(*list, unsigned int); break;
+		case HEX:		fmt->i =		va_arg(list, unsigned int); break;
 		
-		case DOUBLE:	fmt->d =		va_arg(*list, double); break;
-		case LDOUBLE:	fmt->d =		va_arg(*list, long double); break;
+		case DOUBLE:	fmt->d =		va_arg(list, double); break;
+		case LDOUBLE:	fmt->d =		va_arg(list, long double); break;
 		
-		case PTR:		fmt->ptr =		va_arg(*list, void *); break;
-		case STR:		fmt->ptr =		va_arg(*list, char *); break;
+		case PTR:
+		case STR:		fmt->ptr =		va_arg(list, void *); break;
 	}
-
-	// printf("\nARG:\n I='%lld', D='%Lf', PTR='%p'\n\n", fmt->i, fmt->d, fmt->ptr);
 
 }
 
 int parse(const char * format, unsigned int * i, struct FMT * fmt) {
 	char c;
-	while((c = format[(*i)++]) != '}') {
+	while ((c = format[(*i)++]) != '}') {
 		if(c == EOF) {
-			println("\n[FMT Error]: While parsing '{s}' encountered EOF", format);
+			println("\n[FMT Error]: While parsing encountered EOF");
 			return 0;
 		}
 		switch(c) {
@@ -254,11 +327,11 @@ int parse(const char * format, unsigned int * i, struct FMT * fmt) {
 	return 1;
 }
 
-int _print(const char * format, va_list * list) {
-	
-	unsigned int size = len(format), i = 0;
+int _print(const char * format, va_list list) {
+
+	unsigned int size = len(format);
 	char c;
-	while ((c = format[i++]) != 0) {	
+	for (unsigned int i = 0; (c = format[i++]);) {	
 		if (c != '{') {
 			putc(c, stdout);
 			continue;
@@ -270,38 +343,37 @@ int _print(const char * format, va_list * list) {
 		}
 
 		if (fmt->var_len) {
-			if (fmt->pointer) fmt->pointer = va_arg(*list, unsigned int);
-			else fmt->count = va_arg(*list, unsigned int);
+			if (fmt->pointer) fmt->pointer = va_arg(list, unsigned int);
+			else fmt->count = va_arg(list, unsigned int);
 		}
 
 		if (fmt->repeat) {
 			pop_arg(fmt, list);
-			for (unsigned int i = 0; i < fmt->count; ++i) {
-				p(fmt);
+			for (unsigned int j = 0; j < fmt->count; ++j) {
+				p(fmt);	
 			}
 		} else if (fmt->pointer) {
-			fmt->ptr = va_arg(*list, void *);
+			fmt->ptr = va_arg(list, void *);
 			while (fmt->pointer--) {
-				p(fmt);
+				p(fmt);	
 			}
 		} else {
-			for (unsigned int i = 0; i < fmt->count; ++i) {
+			for (unsigned int j = 0; j < fmt->count; ++j) {
 				pop_arg(fmt, list);
-				p(fmt);
+				p(fmt);	
 			}
 		}
 		// printf("\n%s\n\n", fmt_to_str(fmt));
-	}	
+		free(fmt);
+	}
 	return 1;
 }
 
 int print(const char * format, ...) {
 
-	va_list list, copy;
+	va_list list;
 	va_start(list, format);
-	va_copy(copy, list);
-	int ret = _print(format, &list);
-	va_end(copy);
+	int ret = _print(format, list);
 	va_end(list);
 	return ret;
 }
@@ -311,8 +383,7 @@ int println(const char * format, ...) {
 	va_list list, copy;
 	va_start(list, format);
 	va_copy(copy, list);
-	int ret = _print(format, &copy);
-	va_end(copy);
+	int ret = _print(format, copy);
 	va_end(list);
 	putc(10, stdout);
 	return ret;
@@ -324,9 +395,8 @@ char * format(const char * format, ...) {
 	unsigned int size = len(format), buf_index = 0;
 	char * buf = malloc(size * sizeof(char));
 	char c;
-	va_list list, copy;
+	va_list list;
 	va_start(list, format);
-	va_copy(copy, list);
 	for (unsigned int i = 0; (c = format[i++]);) {	
 		if (c != '{') {
 			buf[buf_index++] = c;
@@ -339,12 +409,12 @@ char * format(const char * format, ...) {
 		}
 
 		if (fmt->var_len) {
-			if (fmt->pointer) fmt->pointer = va_arg(copy, unsigned int);
-			else fmt->count = va_arg(copy, unsigned int);
+			if (fmt->pointer) fmt->pointer = va_arg(list, unsigned int);
+			else fmt->count = va_arg(list, unsigned int);
 		}
 
 		if (fmt->repeat) {
-			pop_arg(fmt, &copy);
+			pop_arg(fmt, list);
 			for (unsigned int i = 0; i < fmt->count; ++i) {
 				char * src = f(fmt);
 				size += fmt->str_len;
@@ -352,7 +422,7 @@ char * format(const char * format, ...) {
 				buf_index += concat(buf, src, buf_index);
 			}
 		} else if (fmt->pointer) {
-			fmt->ptr = va_arg(copy, void *);
+			fmt->ptr = va_arg(list, void *);
 			while (fmt->pointer--) {
 				char * src = f(fmt);
 				size += fmt->str_len;
@@ -361,7 +431,7 @@ char * format(const char * format, ...) {
 			}
 		} else {
 			for (unsigned int i = 0; i < fmt->count; ++i) {
-				pop_arg(fmt, &copy);
+				pop_arg(fmt, list);
 				char * src = f(fmt);
 				size += fmt->str_len;
 				buf = realloc(buf, size);
@@ -369,15 +439,15 @@ char * format(const char * format, ...) {
 			}
 		}
 		// printf("\n%s\n\n", fmt_to_str(fmt));
+		free(fmt);
 	}
-	va_end(copy);
 	va_end(list);
 	return buf;
 
 }
 
 void error(const char * str, ...) {
-
+	
 }
 
 struct FMT * init_fmt() {
@@ -388,17 +458,20 @@ struct FMT * init_fmt() {
 	return fmt;
 }
 
-int len(const char * str) {
-	int len = 0;
+unsigned int len(const char * str) {
+	unsigned int len = 0;
 	while (str[len++] != 0);
 	return len;
 }
 
 int concat(char * dest, char * src, unsigned int dest_len) {
 	unsigned int i = 0;
-	while (src[i]) {
-		dest[dest_len++] = src[i++];
+	if (src != NULL) {
+		while (src[i]) {
+			dest[dest_len++] = src[i++];
+		}
 	}
+	dest[dest_len] = 0;
 	return i;
 }
 
@@ -421,12 +494,14 @@ const char * type_to_str(unsigned int type) {
 	}
 }
 
-// char * fmt_to_str(struct FMT * fmt) {
-//
-// 	const char * template = "<i='%li', d='%Lf', ptr='%p', count='%i', type='%s', hex='%d', repeat='%d', var_len='%d', pointer='%d'>\n";
-// 	const char * type = type_to_str(fmt->type);
-// 	unsigned int size = len(template) + len(type) + 64;
-// 	char * buf = calloc(size, sizeof(char));
-// 	snprintf(buf, size, template, fmt->i, fmt->d, (int*)fmt->ptr, fmt->count, type, fmt->hex, fmt->repeat, fmt->var_len, fmt->ptr);
-// 	return buf;
-// }
+#ifdef _DEBUG
+char * fmt_to_str(struct FMT * fmt) {
+
+	const char * template = "<i='%li', d='%Lf', ptr='%p', count='%i', type='%s', hex='%d', repeat='%d', var_len='%d', pointer='%d'>";
+	const char * type = type_to_str(fmt->type);
+	unsigned int size = len(template) + len(type) + 1000;
+	char * buf = calloc(size, sizeof(char));
+	snprintf(buf, size, template, fmt->i, fmt->d, (int*)fmt->ptr, fmt->count, type, fmt->hex, fmt->repeat, fmt->var_len, fmt->ptr);
+	return buf;
+}
+#endif

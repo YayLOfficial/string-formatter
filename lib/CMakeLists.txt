@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(fmt)
+set(CMAKE_BUILD_TYPE Debug)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+message(STATUS "CURR_DIR: ${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_library(fmt SHARED 
-	src/fmt.c
-	include/fmt.h)
+	${CMAKE_CURRENT_SOURCE_DIR}/src/fmt.c
+	${CMAKE_CURRENT_SOURCE_DIR}/include/fmt.h)
 
 

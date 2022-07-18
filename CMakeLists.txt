@@ -1,10 +1,21 @@
 cmake_minimum_required(VERSION 3.0)
-project(main)
+project(test)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_BUILD_TYPE Debug)
 
-add_subdirectory(lib)
+SET(LIBPATH "/home/zimon/lib")
 
-add_executable(exec main.c)
+file(GLOB_RECURSE LIBRARIES CONFIGURE_DEPENDS ${LIBPATH}/lib*.so)
 
-target_link_libraries(exec PRIVATE fmt)
+add_executable(exec test/main.c)
+
+# Add other flags to the compiler
+add_definitions(-DCMAKE_EXPORT_COMPILE_COMMANDS=ON)
+
+# Include header files
+target_include_directories(exec PRIVATE 
+	/home/zimon/include)
+
+# Link libraries
+target_link_libraries(exec PRIVATE ${LIBRARIES})
