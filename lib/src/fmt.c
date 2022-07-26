@@ -15,7 +15,7 @@ enum {
 
 struct FMT {
 	long long int i;
-	long double d;
+	double d;
 	void * ptr;	
 	int hex;
 
@@ -123,8 +123,17 @@ char * fmt_hex(unsigned long int val, struct FMT * fmt) {
 	} while (val);	
 	return buf;
 } 
-char * fmt_double(double val, struct FMT *) {  }
-char * fmt_ldouble(long double val, struct FMT *) {  }
+
+char * fmt_double(double val, struct FMT * fmt) { 
+	// unsigned int len = val & (1 << 63);
+	// long long int fraction = val & ((1 << 53) - 1);
+	// while (fraction /= 10) ++len;
+	// char * buf = malloc(sizeof(char) * (len + 1));
+	// if (len) { buf[0] = '-'; ++len }
+	char * buf = "not implemented.";
+	return buf;
+
+}
 
 char * fmt_ptr(void * val, struct FMT * fmt) {
 	// printf("%p\n", val);
@@ -202,6 +211,12 @@ void p_hex(unsigned long int val, struct FMT * fmt) {
 	free(buf);
 }
 
+void p_double(double val, struct FMT * fmt) {
+	char * buf = fmt_ldouble(val, fmt);
+	p_str(buf);
+	free(buf);
+}
+
 void p_str(char * val) {
 	if (val != NULL) {
 		while (*val) putc(*(val++), stdout);
@@ -232,8 +247,8 @@ void p(struct FMT * fmt) {
 		
 		case HEX:		p_hex((unsigned int)fmt->i, fmt); break;
 			
-		// case DOUBLE:	p_double(fmt->f); break;
-		// case LDOUBLE:	p_ldouble(fmt->f); break;
+		case DOUBLE:
+		case LDOUBLE:	p_ldouble(fmt->d, fmt); break;
 					
 		case PTR:		p_ptr(fmt->ptr, fmt); break;
 		case STR:		p_str(fmt->ptr); break;
